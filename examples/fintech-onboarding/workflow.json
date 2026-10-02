@@ -1,0 +1,11 @@
+{
+  "name": "customer-onboarding",
+  "version": 1,
+  "description": "A simulated customer onboarding workflow with four sequential tasks.",
+  "steps": [
+    { "name": "verify_identity", "task_type": "identity.verify", "max_attempts": 3, "timeout_seconds": 30 },
+    { "name": "risk_check", "task_type": "risk.check", "max_attempts": 3, "timeout_seconds": 30 },
+    { "name": "create_account", "task_type": "account.create", "max_attempts": 3, "timeout_seconds": 30 },
+    { "name": "send_notification", "task_type": "notification.send", "max_attempts": 3, "timeout_seconds": 30 }
+  ]
+}
