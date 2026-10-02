@@ -328,6 +328,10 @@ button:disabled {
   color: var(--accent);
 }
 
+.secondary:hover {
+  background: var(--accent-light);
+}
+
 .notice {
   border: 1px solid var(--line);
   border-radius: 8px;
