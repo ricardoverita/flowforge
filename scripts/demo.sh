@@ -16,6 +16,11 @@ import uuid
 root = pathlib.Path(sys.argv[1])
 base = os.environ.get("FLOWFORGE_API_URL", "http://localhost:8080").rstrip("/")
 token = os.environ.get("API_TOKEN", "")
+parsed_base = urllib.parse.urlsplit(base)
+if parsed_base.scheme not in ("http", "https") or not parsed_base.netloc or parsed_base.username or parsed_base.password or parsed_base.query or parsed_base.fragment:
+    raise SystemExit("FLOWFORGE_API_URL must be an HTTP(S) URL without credentials, query, or fragment.")
+if token and any(ord(character) < 33 or ord(character) > 126 for character in token):
+    raise SystemExit("API_TOKEN must contain only visible ASCII characters.")
 timeout = int(os.environ.get("DEMO_TIMEOUT", "120"))
 if timeout < 1 or timeout > 3600:
     raise SystemExit("DEMO_TIMEOUT must be between 1 and 3600 seconds.")
