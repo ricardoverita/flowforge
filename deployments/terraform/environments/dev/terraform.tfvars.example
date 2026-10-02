@@ -1,0 +1,21 @@
+# Copy to a private .tfvars file. The values below are configuration, never credentials.
+region             = "us-east-1"
+name               = "flowforge-dev"
+enable_nat_gateway = false
+enable_services    = false
+
+# After bootstrapping images, secrets, NATS, TLS and schema:
+# enable_nat_gateway = true # only needed for an external public NATS endpoint
+# enable_services = true
+# schema_initialized = true
+# nats_url = "tls://nats.example.com:4222"
+# certificate_arn = "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERTIFICATE_ID"
+# allowed_api_cidrs = ["YOUR_PUBLIC_IP/32"]
+# database_credentials_secret_arn = "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:APPLICATION_SECRET"
+# runtime_secret_arn = "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:RUNTIME_SECRET"
+# images = {
+#   api = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flowforge-dev-api@sha256:IMAGE_DIGEST"
+#   engine = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flowforge-dev-engine@sha256:IMAGE_DIGEST"
+#   worker = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flowforge-dev-worker@sha256:IMAGE_DIGEST"
+#   migrate = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flowforge-dev-migrate@sha256:IMAGE_DIGEST"
+# }

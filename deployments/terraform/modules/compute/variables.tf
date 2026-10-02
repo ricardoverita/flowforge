@@ -1,0 +1,17 @@
+variable "name" { type = string }
+variable "region" { type = string }
+variable "vpc_id" { type = string }
+variable "private_subnet_ids" { type = list(string) }
+variable "public_subnet_ids" { type = list(string) }
+variable "tasks_security_group_id" { type = string }
+variable "alb_security_group_id" { type = string }
+variable "log_group_name" { type = string }
+variable "enable_services" { type = bool }
+variable "schema_initialized" { type = bool }
+variable "images" { type = map(string) }
+variable "certificate_arn" { type = string }
+variable "nats_url" { type = string }
+variable "database_host" { type = string }
+variable "database_credentials_secret_arn" { type = string }
+variable "runtime_secret_arn" { type = string }
+variable "allowed_api_cidrs" { type = list(string) }

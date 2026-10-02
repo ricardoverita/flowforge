@@ -1,0 +1,105 @@
+name: Deploy ECS (opt-in)
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub environment
+        required: true
+        default: dev
+        type: environment
+      service:
+        description: Service to deploy
+        required: true
+        default: api
+        type: choice
+        options: [api, engine, worker]
+      ecr_repository:
+        description: Existing ECR repository name
+        required: true
+        type: string
+      ecs_cluster:
+        description: Existing ECS cluster name
+        required: true
+        type: string
+      ecs_service:
+        description: Existing ECS service name
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      service:
+        required: true
+        type: string
+      ecr_repository:
+        required: true
+        type: string
+      ecs_cluster:
+        required: true
+        type: string
+      ecs_service:
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: deploy-${{ inputs.environment }}-${{ inputs.service }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: vars.ENABLE_AWS_CD == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      SERVICE: ${{ inputs.service }}
+      ECR_REPOSITORY: ${{ inputs.ecr_repository }}
+      ECS_CLUSTER: ${{ inputs.ecs_cluster }}
+      ECS_SERVICE: ${{ inputs.ecs_service }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Validate deployment configuration
+        run: |
+          case "$SERVICE" in api|engine|worker) ;; *) echo 'Unsupported service'; exit 1 ;; esac
+          test -n "$AWS_REGION"
+          test -n "$ECR_REPOSITORY"
+          test -n "$ECS_CLUSTER"
+          test -n "$ECS_SERVICE"
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: flowforge-${{ github.run_id }}
+          mask-aws-account-id: true
+      - name: Build and publish immutable image
+        run: |
+          repository_uri=$(aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --query 'repositories[0].repositoryUri' --output text)
+          registry=${repository_uri%%/*}
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+          docker build --build-arg SERVICE="$SERVICE" -f deployments/docker/Dockerfile -t "$repository_uri:$GITHUB_SHA" .
+          docker push "$repository_uri:$GITHUB_SHA"
+          digest=$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)
+          echo "DEPLOY_IMAGE=$repository_uri@$digest" >> "$GITHUB_ENV"
+      - name: Register revision and roll out
+        run: |
+          current=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$current" --query taskDefinition > task-definition.json
+          jq -e --arg service "$SERVICE" 'any(.containerDefinitions[]; .name == $service)' task-definition.json > /dev/null
+          jq --arg service "$SERVICE" --arg image "$DEPLOY_IMAGE" '
+            del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+            | .containerDefinitions |= map(if .name == $service then .image = $image else . end)
+          ' task-definition.json > next-task-definition.json
+          revision=$(aws ecs register-task-definition --cli-input-json file://next-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$revision" > /dev/null
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+          aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" > deployed-service.json
+          jq -e --arg revision "$revision" '
+            .services[0] | .taskDefinition == $revision and
+            any(.deployments[]; .status == "PRIMARY" and .taskDefinition == $revision and .rolloutState == "COMPLETED")
+          ' deployed-service.json > /dev/null
+          echo "Deployed $DEPLOY_IMAGE" >> "$GITHUB_STEP_SUMMARY"

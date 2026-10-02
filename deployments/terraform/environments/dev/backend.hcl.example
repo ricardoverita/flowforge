@@ -1,0 +1,6 @@
+# Bootstrap this encrypted, versioned bucket separately. Do not put credentials here.
+bucket       = "YOUR_TERRAFORM_STATE_BUCKET"
+key          = "flowforge/dev/terraform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true

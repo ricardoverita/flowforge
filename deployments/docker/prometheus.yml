@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: flowforge-api
+    static_configs:
+      - targets: [flowforge-api:8080]
+  - job_name: flowforge-engine
+    static_configs:
+      - targets: [flowforge-engine:8081]
+  - job_name: example-worker
+    static_configs:
+      - targets: [example-worker:8082]
