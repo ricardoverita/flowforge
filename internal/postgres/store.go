@@ -286,6 +286,8 @@ func (s *Store) ListEvents(ctx context.Context, id string) ([]execution.Event, e
 }
 
 func (s *Store) Migrate(ctx context.Context, dir string) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 	files, err := filepath.Glob(filepath.Join(dir, "*.sql"))
 	if err != nil {
 		return err
@@ -299,6 +301,10 @@ func (s *Store) Migrate(ctx context.Context, dir string) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// DDL can wait on disk and locks longer than ordinary application queries.
+	if _, err = tx.Exec(ctx, `SET LOCAL statement_timeout = '120s'; SET LOCAL lock_timeout = '30s'`); err != nil {
+		return err
+	}
 	// Serialize deploy-time migration runners without external distributed locks.
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7409271)`); err != nil {
 		return err
