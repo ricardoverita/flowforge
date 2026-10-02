@@ -19,10 +19,12 @@ exit immediately after commit without losing the scheduling intent.
 
 ## Scheduling and publishing
 
-The scheduler locks a due execution with `FOR UPDATE SKIP LOCKED`, restores its
-aggregate, validates the next transition, and writes the step state, event, and
-outbox task atomically. Other engine instances skip claimed executions and work
-on different rows.
+The scheduler selects a candidate with `FOR UPDATE SKIP LOCKED`, restores its
+aggregate under that lock, validates the next transition, and writes the step
+state, event, and outbox task atomically. It rechecks whether work is due because
+the selection's child-row snapshot may be older than the locked execution.
+A poll with no transition leaves the revision and history unchanged. Other
+engine instances skip claimed executions and work on different rows.
 
 The relay claims one outbox row with the same lock convention. A bounded publish
 waits for JetStream PUBACK, then records `published_at`. Unlike the execution

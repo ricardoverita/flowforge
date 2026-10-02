@@ -28,27 +28,30 @@ func RetryDelay(attempt int) time.Duration {
 	base := time.Second * time.Duration(1<<uint(attempt-1))
 	return base/2 + time.Duration(rand.Int64N(int64(base/2)+1))
 }
-func enqueue(ctx context.Context, tx pgx.Tx, e *execution.Execution, now time.Time) error {
+func enqueue(ctx context.Context, tx pgx.Tx, e *execution.Execution, now time.Time) (bool, error) {
 	step, err := e.DispatchNext(now)
 	if err != nil || step == nil {
-		return err
+		return false, err
 	}
 	s := e.Snapshot()
 	task := messaging.Task{ID: messaging.TaskID(s.ID, step.ID, step.Attempt), ExecutionID: s.ID, WorkflowID: s.WorkflowID, StepID: step.ID, TaskType: step.TaskType, Attempt: step.Attempt, Input: step.Input, CorrelationID: s.CorrelationID, DeadlineAt: *step.DeadlineAt}
 	payload, err := json.Marshal(task)
 	if err != nil {
-		return err
+		return false, err
 	}
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, carrier)
 	_, err = tx.Exec(ctx, `INSERT INTO outbox(id,execution_id,subject,payload,traceparent,created_at,available_at)VALUES($1,$2,$3,$4,$5,$6,$6)`, task.ID, s.ID, messaging.TaskPrefix+task.TaskType, payload, carrier.Get("traceparent"), now)
 	if err != nil {
-		return databaseError(err)
+		return false, databaseError(err)
 	}
-	return event(ctx, tx, s.ID, "step.scheduled", step.ID, step.Attempt, now)
+	if err = event(ctx, tx, s.ID, "step.scheduled", step.ID, step.Attempt, now); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
-// AdvanceOne only locks an execution that has due work. The broker is never called in this transaction.
+// AdvanceOne locks a candidate, then revalidates its current state. The broker is never called in this transaction.
 func (s *Store) AdvanceOne(ctx context.Context, now time.Time) (bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -98,8 +101,14 @@ func (s *Store) AdvanceOne(ctx context.Context, now time.Time) (bool, error) {
 			timedOut = &copy
 		}
 	}
-	if err = enqueue(ctx, tx, e, now); err != nil {
+	scheduled, err := enqueue(ctx, tx, e, now)
+	if err != nil {
 		return false, err
+	}
+	// At READ COMMITTED, the selection's child-row snapshot can be stale after
+	// acquiring the parent lock. Persist only a transition made under that lock.
+	if !started && timedOut == nil && !scheduled {
+		return false, nil
 	}
 	if err = saveExecution(ctx, tx, e); err != nil {
 		return false, err
@@ -184,7 +193,7 @@ func (s *Store) ApplyResult(ctx context.Context, r messaging.Result, now time.Ti
 	if err = event(ctx, tx, id, "step."+status, r.StepID, r.Attempt, now); err != nil {
 		return false, err
 	}
-	if err = enqueue(ctx, tx, e, now); err != nil {
+	if _, err = enqueue(ctx, tx, e, now); err != nil {
 		return false, err
 	}
 	if err = saveExecution(ctx, tx, e); err != nil {

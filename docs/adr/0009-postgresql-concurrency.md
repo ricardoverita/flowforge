@@ -14,6 +14,11 @@ before applying a result. Persist with an execution revision comparison and
 increment. Use unique inbox and API idempotency constraints for repeated inputs.
 Keep state, history, and outbox changes in the same transaction.
 
+Revalidate due work after acquiring the execution lock. Under Read Committed,
+the candidate query can retain an older child-row snapshot while observing a
+newer locked execution row. A poll that makes no transition must not increment
+the revision or append history.
+
 ## Consequences
 
 Engine replicas can process different executions without a separate locking

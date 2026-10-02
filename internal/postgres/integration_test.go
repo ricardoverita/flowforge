@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -162,8 +163,10 @@ func TestConcurrentSchedulingDispatchesOnce(t *testing.T) {
 	now := ex.CreatedAt.Add(time.Millisecond)
 	var done atomic.Int64
 	var wg sync.WaitGroup
+	start := make(chan struct{})
 	for range 8 {
 		wg.Go(func() {
+			<-start
 			ok, err := s.AdvanceOne(ctx, now)
 			if err != nil {
 				t.Error(err)
@@ -173,9 +176,44 @@ func TestConcurrentSchedulingDispatchesOnce(t *testing.T) {
 			}
 		})
 	}
+	close(start)
 	wg.Wait()
-	if done.Load() != 1 || count(t, s, "outbox") != 1 {
-		t.Fatal("concurrent scheduling duplicated work")
+	if outbox := count(t, s, "outbox"); done.Load() != 1 || outbox != 1 {
+		t.Fatalf("concurrent scheduling: reported transitions=%d, outbox tasks=%d; want 1 each", done.Load(), outbox)
+	}
+	loaded, err := s.GetExecution(ctx, ex.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Revision != ex.Revision+1 || loaded.Status != execution.StatusRunning || loaded.Steps[0].Status != execution.StepRunning || loaded.Steps[0].Attempt != 1 {
+		t.Fatalf("unexpected scheduled state: revision=%d, status=%s, step status=%s, attempt=%d", loaded.Revision, loaded.Status, loaded.Steps[0].Status, loaded.Steps[0].Attempt)
+	}
+	events, err := s.ListEvents(ctx, ex.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventCounts := map[string]int{}
+	for _, ev := range events {
+		eventCounts[ev.Type]++
+	}
+	if eventCounts["execution.started"] != 1 || eventCounts["step.scheduled"] != 1 {
+		t.Fatalf("unexpected event counts: %v", eventCounts)
+	}
+	for range 8 {
+		if worked, err := s.AdvanceOne(ctx, now); err != nil || worked {
+			t.Fatalf("running step is not due: worked=%t, error=%v", worked, err)
+		}
+	}
+	after, err := s.GetExecution(ctx, ex.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterEvents, err := s.ListEvents(ctx, ex.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(loaded, after) || !reflect.DeepEqual(events, afterEvents) || count(t, s, "outbox") != 1 {
+		t.Fatal("no-op scheduling changed durable state, history, or outbox")
 	}
 }
 func TestResultCommitSchedulesNextAndDeduplicates(t *testing.T) {
