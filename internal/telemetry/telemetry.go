@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,7 +51,12 @@ func Setup(ctx context.Context, service, endpoint string) (http.Handler, func(co
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader), sdkmetric.WithResource(res))
 	options := []sdktrace.TracerProviderOption{sdktrace.WithResource(res)}
 	if endpoint != "" {
-		exporter, e := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint))
+		// The generic OTLP endpoint is a base URL; the SDK option takes a full signal URL.
+		traceEndpoint, e := url.JoinPath(endpoint, "v1/traces")
+		if e != nil {
+			return nil, nil, e
+		}
+		exporter, e := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(traceEndpoint))
 		if e != nil {
 			return nil, nil, e
 		}

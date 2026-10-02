@@ -261,6 +261,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD__FILE: /run/grafana-secrets/grafana_password
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
     ports:
       - "127.0.0.1:3001:3000"
     volumes:

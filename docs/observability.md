@@ -52,7 +52,9 @@ link API creation to task/result logs and execution records.
 
 `make observability` sets `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`
 for container processes. For processes started directly on the host, use
-`http://127.0.0.1:4318`. The collector exports a debug summary to its logs:
+`http://127.0.0.1:4318`. This setting is the collector's base URL; FlowForge appends
+`/v1/traces`, including after any reverse-proxy path prefix. The collector exports
+a debug summary to its logs:
 
 ```bash
 docker compose logs --tail=100 otel-collector
