@@ -16,7 +16,7 @@ source and a FlowForge dashboard. Log in at http://localhost:3001 with username
 `flowforge` and the generated password:
 
 ```bash
-docker compose exec -T postgres cat /run/secrets/grafana_password
+docker compose exec -T grafana cat /run/grafana-secrets/grafana_password
 ```
 
 This command reads a local development credential; do not place its output in

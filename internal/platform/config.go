@@ -34,9 +34,11 @@ func Load(service string) (Config, error) {
 		return c, fmt.Errorf("HTTP_ADDR must contain host and a port between 1 and 65535")
 	}
 	var err error
-	c.NATSToken, err = secret("NATS_TOKEN")
-	if err != nil {
-		return c, err
+	if service == "engine" || service == "worker" {
+		c.NATSToken, err = secret("NATS_TOKEN")
+		if err != nil {
+			return c, err
+		}
 	}
 	if c.DatabaseURL == "" && service != "worker" {
 		password, e := secret("DATABASE_PASSWORD")

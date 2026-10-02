@@ -10,19 +10,6 @@ x-app: &app
   stop_grace_period: 20s
   cpus: 0.50
   mem_limit: 256m
-  volumes:
-    - runtime-secrets:/run/secrets:ro
-  environment: &environment
-    DATABASE_HOST: postgres
-    DATABASE_PORT: "5432"
-    DATABASE_USER: flowforge
-    DATABASE_NAME: flowforge
-    DATABASE_SSLMODE: disable
-    DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
-    NATS_URL: nats://nats:4222
-    NATS_TOKEN_FILE: /run/secrets/nats_token
-    API_TOKEN: ${API_TOKEN:-}
-    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -35,6 +22,18 @@ x-app: &app
     retries: 12
     start_period: 5s
 
+x-database: &database-environment
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_USER: flowforge
+  DATABASE_NAME: flowforge
+  DATABASE_SSLMODE: disable
+  DATABASE_PASSWORD_FILE: /run/db-secrets/postgres_password
+
+x-broker: &broker-environment
+  NATS_URL: nats://nats:4222
+  NATS_TOKEN_FILE: /run/nats-secrets/nats_token
+
 services:
   secrets:
     image: alpine:3.22
@@ -43,7 +42,9 @@ services:
     entrypoint: [/bin/sh, /init-secrets.sh]
     volumes:
       - ./deployments/docker/init-secrets.sh:/init-secrets.sh:ro
-      - runtime-secrets:/secrets
+      - database-secrets:/db-secrets
+      - nats-secrets:/nats-secrets
+      - grafana-secrets:/grafana-secrets
       - postgres-admin-secrets:/admin-secrets
       - postgres-data:/postgres-data
       - nats-data:/nats-data
@@ -70,7 +71,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - postgres-admin-secrets:/run/admin-secrets:ro
       - ./deployments/docker/init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh:ro
-      - runtime-secrets:/run/secrets:ro
+      - database-secrets:/run/db-secrets:ro
     tmpfs: ["/tmp:size=16m,mode=1777", "/var/run/postgresql:size=16m,uid=70,gid=70"]
     read_only: true
     cap_drop: [ALL]
@@ -82,7 +83,7 @@ services:
       secrets:
         condition: service_completed_successfully
     healthcheck:
-      test: [CMD-SHELL, "pg_isready -U postgres -d postgres"]
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -96,7 +97,7 @@ services:
       - "127.0.0.1:${NATS_PORT:-4222}:4222"
     volumes:
       - ./deployments/docker/nats.conf:/etc/nats/nats.conf:ro
-      - runtime-secrets:/run/secrets:ro
+      - nats-secrets:/run/nats-secrets:ro
       - nats-data:/data
     read_only: true
     cap_drop: [ALL]
@@ -120,6 +121,11 @@ services:
       args:
         SERVICE: migrate
     restart: "no"
+    volumes:
+      - database-secrets:/run/db-secrets:ro
+    environment:
+      <<: *database-environment
+      SERVICE_NAME: flowforge-migrate
     depends_on:
       postgres:
         condition: service_healthy
@@ -133,10 +139,17 @@ services:
       dockerfile: deployments/docker/Dockerfile
       args:
         SERVICE: api
+    volumes:
+      - database-secrets:/run/db-secrets:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${API_PORT:-8080}:8080"
     environment:
-      <<: *environment
+      <<: *database-environment
+      API_TOKEN: ${API_TOKEN:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       HTTP_ADDR: :8080
       SERVICE_NAME: flowforge-api
 
@@ -147,21 +160,31 @@ services:
       dockerfile: deployments/docker/Dockerfile
       args:
         SERVICE: engine
+    volumes:
+      - database-secrets:/run/db-secrets:ro
+      - nats-secrets:/run/nats-secrets:ro
     environment:
-      <<: *environment
+      <<: [*database-environment, *broker-environment]
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       HTTP_ADDR: :8081
       SERVICE_NAME: flowforge-engine
       POLL_INTERVAL: 250ms
 
   example-worker:
     <<: *app
+    depends_on:
+      nats:
+        condition: service_healthy
     build:
       context: .
       dockerfile: deployments/docker/Dockerfile
       args:
         SERVICE: worker
+    volumes:
+      - nats-secrets:/run/nats-secrets:ro
     environment:
-      <<: *environment
+      <<: *broker-environment
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       HTTP_ADDR: :8082
       SERVICE_NAME: example-worker
       WORKER_DELAY: ${WORKER_DELAY:-200ms}
@@ -235,14 +258,14 @@ services:
     user: "472:472"
     environment:
       GF_SECURITY_ADMIN_USER: flowforge
-      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_password
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/grafana-secrets/grafana_password
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     ports:
       - "127.0.0.1:3001:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - runtime-secrets:/run/secrets:ro
+      - grafana-secrets:/run/grafana-secrets:ro
       - ./deployments/docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./deployments/docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
     read_only: true
@@ -265,7 +288,9 @@ services:
 volumes:
   postgres-data:
   nats-data:
-  runtime-secrets:
+  database-secrets:
+  nats-secrets:
+  grafana-secrets:
   postgres-admin-secrets:
   grafana-data:
   prometheus-data:

@@ -24,8 +24,10 @@ and credentials must not be added to structured logs.
 
 ## Broker
 
-Compose generates one shared NATS token and keeps the broker port on loopback.
-The development processes can administer streams and publish tasks and results.
+Compose generates one NATS token shared by the broker, engine, and worker, and
+keeps the broker port on loopback. Only those processes mount that credential;
+the API uses PostgreSQL without broker access. Engine and worker can administer
+streams and publish tasks and results in this development stack.
 Production credentials should separate API/engine, worker task types, and stream
 administration, with subject-level permissions. Use TLS and private networking.
 The result envelope's task ID, step ID, attempt, and deadline are consistency
@@ -37,6 +39,9 @@ or inspected without exposing payloads before adding external workers.
 
 ## Database and runtime
 
+Database application, database administration, broker, and Grafana credentials
+use separate named volumes mounted only by the processes that require them.
+The worker has no database credential and the API has no broker credential.
 The initial Compose database role owns the development schema. A production
 deployment should separate migration ownership from application privileges and
 restrict the runtime role to required tables and operations. RDS credentials

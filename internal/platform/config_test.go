@@ -63,3 +63,20 @@ func TestTokenAuthentication(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigDoesNotReadCredentialsForUnrelatedServices(t *testing.T) {
+	clearConfig(t)
+	t.Setenv("DATABASE_URL", "postgres://localhost/flowforge")
+	t.Setenv("NATS_TOKEN_FILE", "/missing/nats-secret")
+	for _, service := range []string{"api", "migrate"} {
+		if _, err := Load(service); err != nil {
+			t.Fatalf("%s read unrelated broker credential: %v", service, err)
+		}
+	}
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("DATABASE_PASSWORD_FILE", "/missing/db-secret")
+	t.Setenv("NATS_TOKEN_FILE", "")
+	if _, err := Load("worker"); err != nil {
+		t.Fatalf("worker read unrelated database credential: %v", err)
+	}
+}

@@ -19,7 +19,7 @@ type Broker struct {
 }
 
 func Open(url, token, service string, logger *slog.Logger) (*Broker, error) {
-	opts := []nats.Option{nats.Name(service), nats.Timeout(5 * time.Second), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second), nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
+	opts := []nats.Option{nats.Name(service), nats.Timeout(5 * time.Second), nats.DrainTimeout(5 * time.Second), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second), nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
 		logger.Error("NATS asynchronous operation failed", "error", err)
 	})}
 	if token != "" {

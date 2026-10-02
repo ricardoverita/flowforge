@@ -24,8 +24,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 docker compose -p "$test_project" up -d --wait postgres nats
-database_password="$(docker compose -p "$test_project" exec -T postgres cat /run/secrets/postgres_password)"
-nats_token="$(docker compose -p "$test_project" exec -T nats cat /run/secrets/nats_token)"
+database_password="$(docker compose -p "$test_project" exec -T postgres cat /run/db-secrets/postgres_password)"
+nats_token="$(docker compose -p "$test_project" exec -T nats cat /run/nats-secrets/nats_token)"
 export TEST_DATABASE_URL="postgres://flowforge:$database_password@127.0.0.1:$POSTGRES_PORT/flowforge?sslmode=disable"
 export TEST_NATS_URL="nats://127.0.0.1:$NATS_PORT"
 export TEST_NATS_TOKEN="$nats_token"

@@ -11,6 +11,8 @@ transaction. When `Idempotency-Key` is present, the request's workflow and paylo
 fingerprint share a durable unique key. The same request returns the existing
 execution; a conflicting payload or workflow returns HTTP 409. A key is not a
 substitute for workflow version identity. Keys have no expiration policy yet.
+The fingerprint normalizes object key order and whitespace while preserving
+number tokens; `1` and `1.0` are distinct request values for this comparison.
 
 The scheduler discovers pending executions from PostgreSQL. An API process can
 exit immediately after commit without losing the scheduling intent.

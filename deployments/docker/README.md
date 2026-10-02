@@ -4,12 +4,12 @@
 docker compose up --build -d --wait
 ```
 
-The short-lived `secrets` container generates random PostgreSQL, NATS and Grafana credentials into Docker named volumes. PostgreSQL administrative credentials are mounted only into the database container; the application role has no superuser, role-creation or database-creation privileges. It also initializes data-volume ownership. Every long-running service runs without root, drops Linux capabilities and uses a read-only root filesystem. Ports bind to `127.0.0.1`; the local API can additionally require a bearer token by setting `API_TOKEN` outside Git.
+The short-lived `secrets` container generates random PostgreSQL, NATS and Grafana credentials into separate Docker named volumes for database clients, NATS clients and Grafana. Each application process mounts only its required secrets. PostgreSQL administrative credentials are mounted only into the database container; the application role has no superuser, role-creation or database-creation privileges. It also initializes data-volume ownership. Every long-running service runs without root, drops Linux capabilities and uses a read-only root filesystem. Ports bind to `127.0.0.1`; the local API can additionally require a bearer token by setting `API_TOKEN` outside Git.
 
 Secrets remain in the named volume across restarts. To read the generated Grafana password locally:
 
 ```sh
-docker compose exec -T postgres cat /run/secrets/grafana_password
+docker compose exec -T grafana cat /run/grafana-secrets/grafana_password
 ```
 
 Use username `flowforge` at `http://localhost:3001`. Anyone with Docker access can already read container secrets; do not reuse development credentials elsewhere.

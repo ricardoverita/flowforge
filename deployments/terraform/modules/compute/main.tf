@@ -103,12 +103,18 @@ resource "aws_ecs_task_definition" "service" {
       { name = "DATABASE_SSLMODE", value = "require" },
       { name = "NATS_URL", value = var.nats_url }
     ]
-    secrets = [
-      { name = "DATABASE_USER", valueFrom = "${var.database_credentials_secret_arn}:username::" },
-      { name = "DATABASE_PASSWORD", valueFrom = "${var.database_credentials_secret_arn}:password::" },
-      { name = "NATS_TOKEN", valueFrom = "${var.runtime_secret_arn}:nats_token::" },
-      { name = "API_TOKEN", valueFrom = "${var.runtime_secret_arn}:api_token::" }
-    ]
+    secrets = concat(
+      each.key == "worker" ? [] : [
+        { name = "DATABASE_USER", valueFrom = "${var.database_credentials_secret_arn}:username::" },
+        { name = "DATABASE_PASSWORD", valueFrom = "${var.database_credentials_secret_arn}:password::" }
+      ],
+      contains(["engine", "worker"], each.key) ? [
+        { name = "NATS_TOKEN", valueFrom = "${var.runtime_secret_arn}:nats_token::" }
+      ] : [],
+      each.key == "api" ? [
+        { name = "API_TOKEN", valueFrom = "${var.runtime_secret_arn}:api_token::" }
+      ] : []
+    )
     logConfiguration = {
       logDriver = "awslogs"
       options = {
