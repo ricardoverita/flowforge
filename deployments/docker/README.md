@@ -4,7 +4,7 @@
 docker compose up --build -d --wait
 ```
 
-The short-lived `secrets` container generates random PostgreSQL, NATS and Grafana credentials into separate Docker named volumes for database clients, NATS clients and Grafana. Each application process mounts only its required secrets. PostgreSQL administrative credentials are mounted only into the database container; the application role has no superuser, role-creation or database-creation privileges. It also initializes data-volume ownership. Every long-running service runs without root, drops Linux capabilities and uses a read-only root filesystem. Ports bind to `127.0.0.1`; the local API can additionally require a bearer token by setting `API_TOKEN` outside Git.
+The short-lived `secrets` container generates random PostgreSQL, NATS and Grafana credentials into separate Docker named volumes for database clients, NATS clients and Grafana. Each application process mounts only its required secrets. PostgreSQL administrative credentials are mounted only into the database container; the application role has no superuser, role-creation or database-creation privileges. It also initializes data-volume ownership. The Go image build shares locked module and compiler caches so Compose builds avoid compiling the same packages concurrently. Every long-running service runs without root, drops Linux capabilities and uses a read-only root filesystem. Ports bind to `127.0.0.1`; the local API can additionally require a bearer token by setting `API_TOKEN` outside Git.
 
 Secrets remain in the named volume across restarts. To read the generated Grafana password locally:
 
